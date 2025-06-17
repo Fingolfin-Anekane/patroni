@@ -64,6 +64,7 @@ class Patroni(AbstractPatroniDaemon, Tags):
         self.dcs = get_dcs(self.config)
         self.request = PatroniRequest(self.config, True)
 
+        logger.info('dbabuev: Patroni().__init__()')
         cluster = self.ensure_dcs_access()
         self.ensure_unique_name(cluster)
 
@@ -161,6 +162,7 @@ class Patroni(AbstractPatroniDaemon, Tags):
         :param local: if there has been changes to the local configuration file.
         """
         try:
+            logger.info('dbabuev: reload_config()')
             super(Patroni, self).reload_config(sighup, local)
             if local:
                 self._tags = self._get_tags()
@@ -203,6 +205,7 @@ class Patroni(AbstractPatroniDaemon, Tags):
         """
         self.api.start()
         self.next_run = time.time()
+        logger.info('dbabuev: run()')
         super(Patroni, self).run()
 
     def _run_cycle(self) -> None:
@@ -245,6 +248,7 @@ def patroni_main(configfile: str) -> None:
 
     :param configfile: path to Patroni configuration file.
     """
+    logger.info('dbabuev: patroni_main()')
     abstract_main(Patroni, configfile)
 
 

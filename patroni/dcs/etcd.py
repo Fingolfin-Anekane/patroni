@@ -7,6 +7,7 @@ import os
 import random
 import socket
 import time
+import traceback
 
 from collections import defaultdict
 from copy import deepcopy
@@ -739,6 +740,12 @@ class Etcd(AbstractEtcd):
         if failover:
             failover = Failover.from_node(failover.modifiedIndex, failover.value)
 
+        # sync switchover key
+        sync_switch = nodes.get(self._SYNC_SWITCHOVER)
+        logger.info(f'dbabuev: loading sync_switch: {sync_switch}')
+        if sync_switch:
+            sync_switch = Failover.from_node(sync_switch.modifiedIndex, sync_switch.value)
+
         # get synchronization state
         sync = nodes.get(self._SYNC)
         sync = SyncState.from_node(sync and sync.modifiedIndex, sync and sync.value)
@@ -750,7 +757,8 @@ class Etcd(AbstractEtcd):
         except Exception:
             failsafe = None
 
-        return Cluster(initialize, config, leader, status, members, failover, sync, history, failsafe)
+        return Cluster(initialize, config, leader, status, members, failover, sync, history, failsafe, sync_switchover=sync_switch)
+
 
     def _postgresql_cluster_loader(self, path: str) -> Cluster:
         """Load and build the :class:`Cluster` object from DCS, which represents a single PostgreSQL cluster.
@@ -821,6 +829,10 @@ class Etcd(AbstractEtcd):
     @catch_etcd_errors
     def set_failover_value(self, value: str, version: Optional[int] = None) -> bool:
         return bool(self._client.write(self.failover_path, value, prevIndex=version or 0))
+
+    @catch_etcd_errors
+    def set_sync_switchover_value(self, value: str, version: Optional[int] = None) -> bool:
+        return bool(self._client.write(self.sync_switchover_path, value, prevIndex=version or 0))
 
     @catch_etcd_errors
     def set_config_value(self, value: str, version: Optional[int] = None) -> bool:

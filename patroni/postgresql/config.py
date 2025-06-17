@@ -373,6 +373,7 @@ class ConfigHandler(object):
     _RECOVERY_PARAMETERS = CaseInsensitiveSet(recovery_parameters.keys())
 
     def __init__(self, postgresql: 'Postgresql', config: Dict[str, Any]) -> None:
+        logger.info('dbabuev: ConfigHandler().__init__()')
         self._postgresql = postgresql
         self._config_dir = os.path.abspath(config.get('config_dir', '') or postgresql.data_dir)
         config_base_name = config.get('config_base_name', 'postgresql')
@@ -1190,6 +1191,7 @@ class ConfigHandler(object):
             del changes['wal_buffers']
 
     def reload_config(self, config: Dict[str, Any], sighup: bool = False) -> None:
+        logger.info('dbabuev: reload_config()')
         self._superuser = config['authentication'].get('superuser', {})
         server_parameters = self.get_server_parameters(config)
         params_skip_changes = CaseInsensitiveSet((*self._RECOVERY_PARAMETERS, 'hot_standby'))
@@ -1309,6 +1311,7 @@ class ConfigHandler(object):
     def set_synchronous_standby_names(self, value: Optional[str]) -> Optional[bool]:
         """Updates synchronous_standby_names and reloads if necessary.
         :returns: True if value was updated."""
+        logger.info(f'dbabuev: set_synchronous_standby_names: {value}, state: {self._postgresql.state}')
         if value != self._server_parameters.get('synchronous_standby_names'):
             if value is None:
                 self._server_parameters.pop('synchronous_standby_names', None)

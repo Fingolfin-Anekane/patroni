@@ -76,6 +76,7 @@ class Postgresql(object):
               "pg_catalog.pg_is_in_recovery() AND pg_catalog.pg_is_{0}_replay_paused()")
 
     def __init__(self, config: Dict[str, Any], mpp: AbstractMPP) -> None:
+        logger.info('dbabuev: Postgresql().__init__()')
         self.name: str = config['name']
         self.scope: str = config['scope']
         self._data_dir: str = config['data_dir']
@@ -338,6 +339,7 @@ class Postgresql(object):
             return PgIsReadyStatus.UNKNOWN
 
     def reload_config(self, config: Dict[str, Any], sighup: bool = False) -> None:
+        logger.info('dbabuev: reload_config() postgresql')
         self.config.reload_config(config, sighup)
         self._is_leader_retry.deadline = self.retry.deadline = config['retry_timeout'] / 2.0
 

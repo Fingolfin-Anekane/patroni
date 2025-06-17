@@ -337,6 +337,9 @@ class ZooKeeper(AbstractDCS):
     def set_failover_value(self, value: str, version: Optional[int] = None) -> bool:
         return self._set_or_create(self.failover_path, value, version) is not False
 
+    def set_sync_switchover_value(self, value: str, version: Optional[int] = None) -> bool:
+        return self._set_or_create(self.sync_switchover_path, value, version) is not False
+
     def set_config_value(self, value: str, version: Optional[int] = None) -> bool:
         return self._set_or_create(self.config_path, value, version, retry=True) is not False
 

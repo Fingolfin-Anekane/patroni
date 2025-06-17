@@ -1164,14 +1164,16 @@ class RestApiHandler(BaseHTTPRequestHandler):
                 status_code = 412
 
         if not data:
-            if self.server.patroni.dcs.manual_failover(leader, candidate, scheduled_at=scheduled_at):
+            if self.server.patroni.dcs.manual_switch_sync(leader, candidate, scheduled_at=scheduled_at):
+            #if self.server.patroni.dcs.manual_failover(leader, candidate, scheduled_at=scheduled_at):
                 self.server.patroni.ha.wakeup()
                 if scheduled_at:
                     data = action.title() + ' scheduled'
                     status_code = 202
                 else:
-                    status_code, data = self.poll_failover_result(cluster.leader and cluster.leader.name,
-                                                                  candidate, action)
+                    #status_code, data = self.poll_failover_result(cluster.leader and cluster.leader.name,
+                                                                  #candidate, action)
+                    logger.info('dbabuev: manual sync switch')
             else:
                 data = 'failed to write failover key into DCS'
                 status_code = 503
@@ -1187,6 +1189,7 @@ class RestApiHandler(BaseHTTPRequestHandler):
 
         Calls :func:`do_POST_failover` with ``switchover`` option.
         """
+
         self.do_POST_failover(action='switchover')
 
     @check_access

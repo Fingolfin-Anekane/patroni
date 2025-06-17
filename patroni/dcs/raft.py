@@ -433,6 +433,9 @@ class Raft(AbstractDCS):
     def set_failover_value(self, value: str, version: Optional[int] = None) -> bool:
         return self._sync_obj.set(self.failover_path, value, prevIndex=version) is not False
 
+    def set_sync_switchover_value(self, value: str, version: Optional[int] = None) -> bool:
+        return self._sync_obj.set(self.sync_switchover_path, value, prevIndex=version) is not False
+
     def set_config_value(self, value: str, version: Optional[int] = None) -> bool:
         return self._sync_obj.set(self.config_path, value, prevIndex=version) is not False
 

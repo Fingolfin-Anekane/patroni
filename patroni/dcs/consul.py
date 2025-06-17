@@ -615,6 +615,10 @@ class Consul(AbstractDCS):
         return self._client.kv.put(self.failover_path, value, cas=version)
 
     @catch_consul_errors
+    def set_sync_switchover_value(self, value: str, version: Optional[int] = None) -> bool:
+        return self._client.kv.put(self.failover_path, value, cas=version)
+
+    @catch_consul_errors
     def set_config_value(self, value: str, version: Optional[int] = None) -> bool:
         return self._client.kv.put(self.config_path, value, cas=version)
 

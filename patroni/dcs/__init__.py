@@ -842,7 +842,8 @@ class Cluster(NamedTuple('Cluster',
                           ('sync', SyncState),
                           ('history', Optional[TimelineHistory]),
                           ('failsafe', Optional[Dict[str, str]]),
-                          ('workers', Dict[int, 'Cluster'])])):
+                          ('workers', Dict[int, 'Cluster']),
+                          ('sync_switchover', Optional[Failover])])):
     """Immutable object (namedtuple) which represents PostgreSQL or MPP cluster.
 
     .. note::
@@ -882,7 +883,7 @@ class Cluster(NamedTuple('Cluster',
     @staticmethod
     def empty() -> 'Cluster':
         """Produce an empty :class:`Cluster` instance."""
-        return Cluster(None, None, None, Status.empty(), [], None, SyncState.empty(), None, None, {})
+        return Cluster(None, None, None, Status.empty(), [], None, SyncState.empty(), None, None, {}, None)
 
     def is_empty(self):
         """Validate definition of all attributes of this :class:`Cluster` instance.
@@ -906,7 +907,7 @@ class Cluster(NamedTuple('Cluster',
            >>> assert bool(cluster) is False
 
            >>> status = Status(0, None, [])
-           >>> cluster = Cluster(None, None, None, status, [1, 2, 3], None, SyncState.empty(), None, None, {})
+           >>> cluster = Cluster(None, None, None, status, [1, 2, 3], None, SyncState.empty(), None, None, {}, None)
            >>> len(cluster)
            1
 
@@ -1510,6 +1511,7 @@ class AbstractDCS(abc.ABC):
     _LEADER_OPTIME = _OPTIME + '/' + _LEADER  # legacy
     _SYNC = 'sync'
     _FAILSAFE = 'failsafe'
+    _SYNC_SWITCHOVER = 'sync_switchover'
 
     def __init__(self, config: Dict[str, Any], mpp: 'AbstractMPP') -> None:
         """Prepare DCS paths, MPP object, initial values for state information and processing dependencies.
@@ -1581,6 +1583,11 @@ class AbstractDCS(abc.ABC):
     def failover_path(self) -> str:
         """Get the client path for ``failover``."""
         return self.client_path(self._FAILOVER)
+
+    @property
+    def sync_switchover_path(self) -> str:
+        """Get the client path for ``sync_switchover_path``."""
+        return self.client_path(self._SYNC_SWITCHOVER)
 
     @property
     def history_path(self) -> str:
@@ -1715,6 +1722,7 @@ class AbstractDCS(abc.ABC):
         :returns: Select :class:`Cluster` instance associated with the MPP Coordinator group ID.
         """
         try:
+            logger.info('dbabuev: get_mpp_coordinator()')
             return self.__get_postgresql_cluster(f'{self._base_path}/{self._mpp.coordinator_group_id}/')
         except Exception as e:
             logger.error('Failed to load %s coordinator cluster from %s: %r',
@@ -1745,6 +1753,7 @@ class AbstractDCS(abc.ABC):
 
         :returns:
         """
+        logger.info('dbabuev: get_cluster()')
         try:
             cluster = self._get_mpp_cluster() if self.is_mpp_coordinator() else self.__get_postgresql_cluster()
         except Exception:
@@ -1984,6 +1993,16 @@ class AbstractDCS(abc.ABC):
         :returns: ``True`` if successfully committed to DCS.
         """
 
+    @abc.abstractmethod
+    def set_sync_switchover_value(self, value: str, version: Optional[int] = None) -> bool:
+        """Create or update ``/sync_switchover`` key
+
+        :param value: value to set.
+        :param version: for conditional update of the key/object.
+
+        :returns: ``True`` if successfully committed to DCS.
+        """
+
     def manual_failover(self, leader: Optional[str], candidate: Optional[str],
                         scheduled_at: Optional[datetime.datetime] = None, version: Optional[Any] = None) -> bool:
         """Prepare dictionary with given values and set ``/failover`` key in DCS.
@@ -2005,6 +2024,19 @@ class AbstractDCS(abc.ABC):
         if scheduled_at:
             failover_value['scheduled_at'] = scheduled_at.isoformat()
         return self.set_failover_value(json.dumps(failover_value, separators=(',', ':')), version)
+
+    def manual_switch_sync(self, leader: Optional[str], candidate: Optional[str],
+                        scheduled_at: Optional[datetime.datetime] = None, version: Optional[Any] = None) -> bool:
+        failover_value = {}
+        if leader:
+            failover_value['leader'] = leader
+
+        if candidate:
+            failover_value['member'] = candidate
+
+        if scheduled_at:
+            failover_value['scheduled_at'] = scheduled_at.isoformat()
+        return self.set_sync_switchover_value(json.dumps(failover_value, separators=(',', ':')), version)
 
     @abc.abstractmethod
     def set_config_value(self, value: str, version: Optional[Any] = None) -> bool:

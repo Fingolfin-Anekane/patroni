@@ -26,6 +26,7 @@ from .utils import parse_int, polling_loop, tzutc
 
 logger = logging.getLogger(__name__)
 
+# dbabuev comment
 
 class _MemberStatus(Tags, NamedTuple('_MemberStatus',
                                      [('member', Member),
@@ -325,6 +326,7 @@ class Ha(object):
         return 'switchover' if self.cluster.failover.leader else 'manual failover'
 
     def load_cluster_from_dcs(self) -> None:
+        logger.info('dbabuev: load_cluster_from_dcs')
         cluster = self.dcs.get_cluster()
 
         # We want to keep the state of cluster when it was healthy
@@ -505,6 +507,7 @@ class Ha(object):
             return ret
 
     def clone(self, clone_member: Union[Leader, Member, None] = None, msg: str = '(without leader)') -> Optional[bool]:
+        logger.info('dbabuev: clone')
         if self.is_standby_cluster() and not isinstance(clone_member, RemoteMember):
             clone_member = self.get_remote_member(clone_member)
 
@@ -908,6 +911,12 @@ class Ha(object):
         picked = current_state.active
         allow_promote = current_state.sync
         voters = CaseInsensitiveSet(sync.voters)
+        logger.info(f'dbabuev: sync: {sync}')
+        logger.info(f'dbabuev: current_state: {current_state}')
+        logger.info(f'dbabuev: picked: {picked}')
+        logger.info(f'dbabuev: allow_promote {allow_promote}')
+        logger.info(f'dbabuev: voters {voters}')
+
 
         if picked == voters and voters != allow_promote:
             logger.warning('Inconsistent state between synchronous_standby_names = %s and /sync = %s key '
@@ -952,6 +961,7 @@ class Ha(object):
     def process_sync_replication(self) -> None:
         """Process synchronous replication behavior on the primary."""
         if self.is_quorum_commit_mode():
+            logger.info('dbabuev: process_sync_replication: self.is_quorum_commit_mode()')
             # The synchronous_standby_names was adjusted right before promote.
             # After that, when postgres has become a primary, we need to reflect this change
             # in the /sync key. Further changes of synchronous_standby_names and /sync key should
@@ -963,6 +973,7 @@ class Ha(object):
                 if self._promote_timestamp == 0:
                     self._promote_timestamp = time.time()
         elif self.is_synchronous_mode():
+            logger.info('dbabuev: process_sync_replication: self._process_multisync_replication()')
             self._process_multisync_replication()
         else:
             self.disable_synchronous_replication()
@@ -1101,6 +1112,7 @@ class Ha(object):
                     return 'Promotion cancelled because the pre-promote script failed'
 
         if self.state_handler.is_primary():
+            logger.info('dbabuev: self.state_handler.is_primary()')
             # Inform the state handler about its primary role.
             # It may be unaware of it if postgres is promoted manually.
             self.state_handler.set_role(PostgresqlRole.PRIMARY)
@@ -1109,9 +1121,11 @@ class Ha(object):
             self.state_handler.mpp_handler.sync_meta_data(self.cluster)
             return message
         elif self.state_handler.role in (PostgresqlRole.PRIMARY, PostgresqlRole.PROMOTED):
+            logger.info('dbabuev: self.state_handler.role in (PostgresqlRole.PRIMARY, PostgresqlRole.PROMOTED)')
             self.process_sync_replication()
             return message
         else:
+            logger.info('dbabuev: else enforce_primary_role')
             if not self.process_sync_replication_prepromote():
                 # Somebody else updated sync state, it may be due to us losing the lock. To be safe,
                 # postpone promotion until next cycle. TODO: trigger immediate retry of run_cycle.
@@ -1607,6 +1621,7 @@ class Ha(object):
             node_to_follow, leader = None, None
         else:
             try:
+                logger.info('dbabuev: demote')
                 cluster = self.dcs.get_cluster()
                 node_to_follow, leader = self._get_node_to_follow(cluster), cluster.leader
             except Exception:
@@ -1659,6 +1674,29 @@ class Ha(object):
                 logger.warning('Incorrect value of scheduled_at: %s', scheduled_at)
                 cleanup_fn()
         return False
+
+    def process_manual_sync_switchover(self) -> Optional[str]:
+        """
+
+        """
+        if not self.has_lock():
+            logger.info(f'dbabuev: no lock')
+            return 'no lock'
+
+        sync_switchover = self.cluster.sync_switchover
+        if not sync_switchover or (self.is_paused() and not self.state_handler.is_primary()):
+            return 'no switchower'
+
+        logger.info("Assigning synchronous standby status to %s", sync_switchover.candidate)
+        self.state_handler.sync_handler.set_synchronous_standby_names([sync_switchover.candidate])
+
+        if self.dcs.write_sync_state(self.state_handler.name, sync_switchover.candidate, 0):
+            logger.info("Synchronous standby status assigned to %s", sync_switchover.candidate)
+        else:
+            logger.info("Synchronous replication key updated by someone else")
+        logger.info('Cleaning up sync switchover key')
+        self.dcs.manual_switch_sync('', '', version=sync_switchover.version)
+        return 'success'
 
     def process_manual_failover_from_leader(self) -> Optional[str]:
         """Checks if manual failover is requested and takes action if appropriate.
@@ -1741,6 +1779,7 @@ class Ha(object):
                                    'following a different leader because I am not allowed to promote')
             return self.follow('demoting self because i am not the healthiest node',
                                'following a different leader because i am not the healthiest node')
+
 
     def process_healthy_cluster(self) -> str:
         if self.has_lock():
@@ -2091,7 +2130,9 @@ class Ha(object):
         dcs_failed = False
         try:
             try:
+                logger.info('dbabuev: loading cluster')
                 self.load_cluster_from_dcs()
+                logger.info('dbabuev: cluster loaded')
                 global_config.update(self.cluster)
                 self.state_handler.reset_cluster_info_state(self.cluster, self.patroni)
             except Exception as exc1:
@@ -2125,6 +2166,7 @@ class Ha(object):
 
             if self.has_lock(False) and not (self.cluster.config and self.cluster.config.data):
                 self.dcs.set_config_value(json.dumps(self.patroni.config.dynamic_configuration, separators=(',', ':')))
+                logger.info('dbabuev: run cycle')
                 self.cluster = self.dcs.get_cluster()
 
             if self._async_executor.busy:
@@ -2233,10 +2275,13 @@ class Ha(object):
                 # try to start dead postgres
                 return self.recover()
 
+
+            logger.info('dbabuev: processing cluster')
             if self.cluster.is_unlocked():
                 ret = self.process_unhealthy_cluster()
             else:
                 msg = self.process_healthy_cluster()
+                msg = self.process_manual_sync_switchover()
                 ret = self.evaluate_scheduled_restart() or msg
 
             # We might not have a valid PostgreSQL connection here if AsyncExecutor is doing
