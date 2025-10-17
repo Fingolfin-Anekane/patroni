@@ -1276,8 +1276,8 @@ class RestApiHandler(BaseHTTPRequestHandler):
             time.sleep(1)
             try:
                 cluster = self.server.patroni.dcs.get_cluster()
-                sync_list = cluster.sync.voters()
-                if sync_list and set(sync_list) == set(candidates):
+                sync = cluster.sync.sync_standby.split(',')
+                if sync and set(sync) == set(candidates):
                     return 200, f'Successfully switched synchronous replicas to {candidates}'
                 if not cluster.sync_switchover:
                     return 503, 'sync switchover failed'
@@ -1320,7 +1320,8 @@ class RestApiHandler(BaseHTTPRequestHandler):
             if scheduled_at:
                 self.write_response(202, 'sync switchover scheduled')
                 return
-            self.write_response(self.poll_sync_switchover_result(candidates))
+            code, body = self.poll_sync_switchover_result(candidates)
+            self.write_response(code, body)
             return
         else:
             self.write_response(503, 'failed to write sync_switchover key into DCS')
@@ -1363,9 +1364,11 @@ class RestApiHandler(BaseHTTPRequestHandler):
             return (f'Synchronous node count is {config.synchronous_node_count}'
                     f' but requested count is  {len(candidates)}.')
 
+        allowed_candidates = [str(m.name) for m in cluster.members if m.name != leader and not m.nofailover and
+                                not m.nosync and not m.nostream and not m.noloadbalance]
         for candidate in candidates:
-            if not cluster.get_member(candidate, False):
-                return f'Candidate {candidate} is not found in cluster'
+            if candidate not in allowed_candidates:
+                return f"Candidate {candidate} either doesn't exist in cluster or has denying tags"
 
     @check_access
     def do_POST_citus(self) -> None:

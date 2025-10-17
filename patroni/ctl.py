@@ -1421,7 +1421,7 @@ def _do_sync_switchover(cluster_name: str, candidates: Optional[List[str]],
     cluster = dcs.get_cluster()
     click.echo('Current cluster topology')
     output_members(cluster, cluster_name, group=None)
-    cluster_sync = cluster.sync.sync_standby
+    cluster_sync = cluster.sync.sync_standby.split(',')
     cluster_leader = cluster.leader and cluster.leader.name
 
     config = global_config.from_cluster(cluster)
@@ -1443,7 +1443,8 @@ def _do_sync_switchover(cluster_name: str, candidates: Optional[List[str]],
         raise PatroniCtlException(f'Member {switchover_leader} is not the leader of cluster {cluster_name}')
 
     # excluding members with nofailover tag
-    candidate_names = [str(m.name) for m in cluster.members if m.name != cluster_leader and not m.nofailover]
+    candidate_names = [str(m.name) for m in cluster.members if m.name != cluster_leader and not m.nofailover and
+                       not m.nosync and not m.nostream and not m.noloadbalance]
     # We sort the names for consistent output to the client
     candidate_names.sort()
 
@@ -1459,9 +1460,7 @@ def _do_sync_switchover(cluster_name: str, candidates: Optional[List[str]],
                     raise PatroniCtlException(
                         f'Member {cluster_leader} is the leader of cluster {cluster_name} and cannot be assigned to synchronous stadby')
                 raise PatroniCtlException(
-                    f'Member {candidate} does not exist in cluster {cluster_name} or is tagged as nofailover')
-            if candidate == cluster_sync:
-                raise PatroniCtlException(f'Member {candidate} is already synchronous standby')
+                    f'Member {candidate} does not exist in cluster {cluster_name} or is tagged as nofailover or nosync or nostream or noloadbalance')
     else:
         allowed_candidates = [c for c in candidate_names if c != cluster_sync]
         candidates = click.prompt(f'Choose allowed candidates to become synchronous standby (if multiple use comma) {allowed_candidates}', type=str, default=None).split(',')
